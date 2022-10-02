@@ -17,24 +17,23 @@ const sinon = require('sinon');
  * Test `ExpressOAuthServer`.
  */
 
-describe('ExpressOAuthServer', function() {
-
+describe('ExpressOAuthServer', function () {
   let app, server;
 
-  beforeEach(function() {
+  beforeEach(function () {
     app = express();
     app.use(bodyparser.json());
     app.use(bodyparser.urlencoded({ extended: false }));
   });
 
-  afterEach(function() {
-    if(server){
+  afterEach(function () {
+    if (server) {
       server.close();
     }
   });
 
-  describe('constructor()', function() {
-    it('should throw an error if `model` is missing', function() {
+  describe('constructor()', function () {
+    it('should throw an error if `model` is missing', function () {
       try {
         new ExpressOAuthServer({});
 
@@ -45,49 +44,47 @@ describe('ExpressOAuthServer', function() {
       }
     });
 
-    it('should set the `server`', function() {
+    it('should set the `server`', function () {
       let oauth = new ExpressOAuthServer({ model: {} });
 
       oauth.server.should.be.an.instanceOf(NodeOAuthServer);
     });
   });
 
-  describe('authenticate()', function() {
-
-    it('should return an error if `model` is empty', function(done) {
+  describe('authenticate()', function () {
+    it('should return an error if `model` is empty', function (done) {
       let oauth = new ExpressOAuthServer({ model: {} });
 
       app.use(oauth.authenticate());
       server = app.listen();
       request(server)
         .get('/')
-        .end(function(err, res) {
+        .end(function (err, res) {
           res.should.have.property('body');
-          res.body.should.have.properties([
-            'error',
-            'error_description'
-          ]);
-          res.body.error.should.eql('invalid_argument')
-          res.body.error_description.should.eql('Invalid argument: model does not implement `getAccessToken()`');
+          res.body.should.have.properties(['error', 'error_description']);
+          res.body.error.should.eql('invalid_argument');
+          res.body.error_description.should.eql(
+            'Invalid argument: model does not implement `getAccessToken()`'
+          );
           done();
         });
     });
 
-    it('should authenticate the request', function(done) {
+    it('should authenticate the request', function (done) {
       let tokenExpires = new Date();
       tokenExpires.setDate(tokenExpires.getDate() + 1);
 
       let token = { user: {}, accessTokenExpiresAt: tokenExpires };
       let model = {
-        getAccessToken: function() {
+        getAccessToken: function () {
           return token;
-        }
+        },
       };
       let oauth = new ExpressOAuthServer({ model: model });
 
       app.use(oauth.authenticate());
 
-      app.use(function(req, res, next) {
+      app.use(function (req, res, next) {
         res.send();
 
         next();
@@ -101,20 +98,20 @@ describe('ExpressOAuthServer', function() {
         .end(done);
     });
 
-    it('should cache the authorization token', function(done) {
+    it('should cache the authorization token', function (done) {
       let tokenExpires = new Date();
       tokenExpires.setDate(tokenExpires.getDate() + 1);
       let token = { user: {}, accessTokenExpiresAt: tokenExpires };
       let model = {
-        getAccessToken: function() {
+        getAccessToken: function () {
           return token;
-        }
+        },
       };
       let oauth = new ExpressOAuthServer({ model: model });
 
       app.use(oauth.authenticate());
-      
-      let spy = sinon.spy(function(req, res, next) {
+
+      let spy = sinon.spy(function (req, res, next) {
         res.locals.oauth.token.should.equal(token);
         res.send(token);
         next();
@@ -125,35 +122,41 @@ describe('ExpressOAuthServer', function() {
       request(server)
         .get('/')
         .set('Authorization', 'Bearer foobar')
-        .expect(200, function(err, res){
-            spy.called.should.be.True();
-            done(err);
+        .expect(200, function (err, res) {
+          spy.called.should.be.True();
+          done(err);
         });
     });
   });
 
-  describe('authorize()', function() {
-    it('should cache the authorization code', function(done) {
+  describe('authorize()', function () {
+    it('should cache the authorization code', function (done) {
       let tokenExpires = new Date();
       tokenExpires.setDate(tokenExpires.getDate() + 1);
 
       let code = { authorizationCode: 123 };
       let model = {
-        getAccessToken: function() {
+        getAccessToken: function () {
           return { user: {}, accessTokenExpiresAt: tokenExpires };
         },
-        getClient: function() {
-          return { grants: ['authorization_code'], redirectUris: ['http://example.com'] };
+        getClient: function () {
+          return {
+            grants: ['authorization_code'],
+            redirectUris: ['http://example.com'],
+          };
         },
-        saveAuthorizationCode: function() {
+        saveAuthorizationCode: function () {
           return code;
-        }
+        },
       };
-      let oauth = new ExpressOAuthServer({ model: model, continueMiddleware: true });
+      let oauth = new ExpressOAuthServer({
+        model: model,
+        continueMiddleware: true,
+      });
 
       app.use(oauth.authorize());
 
-      let spy = sinon.spy(function(req, res, next) {
+      let spy = sinon.spy(function (req, res, next) {
         res.locals.oauth.code.should.equal(code);
         next();
       });
@@ -164,23 +167,26 @@ describe('ExpressOAuthServer', function() {
         .post('/?state=foobiz')
         .set('Authorization', 'Bearer foobar')
         .send({ client_id: 12345, response_type: 'code' })
-        .expect(302, function(err, res){
-            spy.called.should.be.True();
-            done(err);
+        .expect(302, function (err, res) {
+          spy.called.should.be.True();
+          done(err);
         });
     });
 
-    it('should return an error', function(done) {
+    it('should return an error', function (done) {
       let model = {
-        getAccessToken: function() {
+        getAccessToken: function () {
           return { user: {}, accessTokenExpiresAt: new Date() };
         },
-        getClient: function() {
-          return { grants: ['authorization_code'], redirectUris: ['http://example.com'] };
+        getClient: function () {
+          return {
+            grants: ['authorization_code'],
+            redirectUris: ['http://example.com'],
+          };
         },
-        saveAuthorizationCode: function() {
+        saveAuthorizationCode: function () {
           return {};
-        }
+        },
       };
       let oauth = new ExpressOAuthServer({ model: model });
 
@@ -191,24 +197,29 @@ describe('ExpressOAuthServer', function() {
         .post('/?state=foobiz')
         .set('Authorization', 'Bearer foobar')
         .send({ client_id: 12345 })
-        .expect(400, function(err, res) {
+        .expect(400, function (err, res) {
           res.body.error.should.eql('invalid_request');
-          res.body.error_description.should.eql('Missing parameter: `response_type`');
+          res.body.error_description.should.eql(
+            'Missing parameter: `response_type`'
+          );
           done(err);
         });
     });
 
-    it('should return a `location` header with the code', function(done) {
+    it('should return a `location` header with the code', function (done) {
       let model = {
-        getAccessToken: function() {
+        getAccessToken: function () {
           return { user: {}, accessTokenExpiresAt: new Date() };
         },
-        getClient: function() {
-          return { grants: ['authorization_code'], redirectUris: ['http://example.com'] };
+        getClient: function () {
+          return {
+            grants: ['authorization_code'],
+            redirectUris: ['http://example.com'],
+          };
         },
-        saveAuthorizationCode: function() {
+        saveAuthorizationCode: function () {
           return { authorizationCode: 123 };
-        }
+        },
       };
       let oauth = new ExpressOAuthServer({ model: model });
 
@@ -223,7 +234,7 @@ describe('ExpressOAuthServer', function() {
         .end(done);
     });
 
-    it('should return an error if `model` is empty', function(done) {
+    it('should return an error if `model` is empty', function (done) {
       let oauth = new ExpressOAuthServer({ model: {} });
 
       app.use(oauth.authorize());
@@ -231,29 +242,36 @@ describe('ExpressOAuthServer', function() {
       server = app.listen();
       request(server)
         .post('/')
-        .expect({ error: 'invalid_argument', error_description: 'Invalid argument: model does not implement `getClient()`' })
+        .expect({
+          error: 'invalid_argument',
+          error_description:
+            'Invalid argument: model does not implement `getClient()`',
+        })
         .end(done);
     });
   });
 
-  describe('token()', function() {
-    it('should cache the authorization token', function(done) {
+  describe('token()', function () {
+    it('should cache the authorization token', function (done) {
       let token = { accessToken: 'foobar', client: {}, user: {} };
       let model = {
-        getClient: function() {
+        getClient: function () {
           return { grants: ['password'] };
         },
-        getUser: function() {
+        getUser: function () {
           return {};
         },
-        saveToken: function() {
+        saveToken: function () {
           return token;
-        }
+        },
       };
-      let oauth = new ExpressOAuthServer({ model: model, continueMiddleware: true });
+      let oauth = new ExpressOAuthServer({
+        model: model,
+        continueMiddleware: true,
+      });
 
       app.use(oauth.token());
-      let spy = sinon.spy(function(req, res, next) {
+      let spy = sinon.spy(function (req, res, next) {
         res.locals.oauth.token.should.equal(token);
 
         next();
@@ -263,50 +281,62 @@ describe('ExpressOAuthServer', function() {
       server = app.listen();
       request(server)
         .post('/')
-        .send('client_id=foo&client_secret=bar&grant_type=password&username=qux&password=biz')
+        .send(
+          'client_id=foo&client_secret=bar&grant_type=password&username=qux&password=biz'
+        )
         .expect({ access_token: 'foobar', token_type: 'Bearer' })
-        .expect(200, function(err, res){
+        .expect(200, function (err, res) {
           spy.called.should.be.True();
           done(err);
         });
     });
 
-    it('should return an `access_token`', function(done) {
+    it('should return an `access_token`', function (done) {
       let model = {
-        getClient: function() {
+        getClient: function () {
           return { grants: ['password'] };
         },
-        getUser: function() {
+        getUser: function () {
           return {};
         },
-        saveToken: function() {
+        saveToken: function () {
           return { accessToken: 'foobar', client: {}, user: {} };
-        }
+        },
       };
       let spy = sinon.spy();
-      let oauth = new ExpressOAuthServer({ model: model, continueMiddleware: true });
+      let oauth = new ExpressOAuthServer({
+        model: model,
+        continueMiddleware: true,
+      });
 
       app.use(oauth.token());
 
       server = app.listen();
       request(server)
         .post('/')
-        .send('client_id=foo&client_secret=bar&grant_type=password&username=qux&password=biz')
+        .send(
+          'client_id=foo&client_secret=bar&grant_type=password&username=qux&password=biz'
+        )
         .expect({ access_token: 'foobar', token_type: 'Bearer' })
         .end(done);
     });
 
-    it('should return a `refresh_token`', function(done) {
+    it('should return a `refresh_token`', function (done) {
       let model = {
-        getClient: function() {
+        getClient: function () {
           return { grants: ['password'] };
         },
-        getUser: function() {
+        getUser: function () {
           return {};
         },
-        saveToken: function() {
-          return { accessToken: 'foobar', client: {}, refreshToken: 'foobiz', user: {} };
-        }
+        saveToken: function () {
+          return {
+            accessToken: 'foobar',
+            client: {},
+            refreshToken: 'foobiz',
+            user: {},
+          };
+        },
       };
       let oauth = new ExpressOAuthServer({ model: model });
 
@@ -315,12 +345,18 @@ describe('ExpressOAuthServer', function() {
       server = app.listen();
       request(server)
         .post('/')
-        .send('client_id=foo&client_secret=bar&grant_type=password&username=qux&password=biz')
-        .expect({ access_token: 'foobar', refresh_token: 'foobiz', token_type: 'Bearer' })
+        .send(
+          'client_id=foo&client_secret=bar&grant_type=password&username=qux&password=biz'
+        )
+        .expect({
+          access_token: 'foobar',
+          refresh_token: 'foobiz',
+          token_type: 'Bearer',
+        })
         .end(done);
     });
 
-    it('should return an error if `model` is empty', function(done) {
+    it('should return an error if `model` is empty', function (done) {
       let oauth = new ExpressOAuthServer({ model: {} });
 
       app.use(oauth.token());
@@ -328,7 +364,11 @@ describe('ExpressOAuthServer', function() {
       server = app.listen();
       request(server)
         .post('/')
-        .expect({ error: 'invalid_argument', error_description: 'Invalid argument: model does not implement `getClient()`' })
+        .expect({
+          error: 'invalid_argument',
+          error_description:
+            'Invalid argument: model does not implement `getClient()`',
+        })
         .end(done);
     });
   });
